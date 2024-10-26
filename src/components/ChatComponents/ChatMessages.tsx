@@ -24,6 +24,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({
   onEdit,
   onDelete,
 }) => {
+  console.log("test");
   const [loadingDots, setLoadingDots] = useState("");
 
   const scrollToBottom = () => {
