@@ -245,7 +245,7 @@ ${chatContent}`;
     [app, chatHistory, currentModelKey, defaultSaveFolder, settings.defaultConversationTag]
   );
 
-  const refreshVaultContext = async () => {
+  const refreshVaultContext = useCallback(async () => {
     if (!app) {
       console.error("App instance is not available.");
       return;
@@ -258,7 +258,7 @@ ${chatContent}`;
       console.error("Error refreshing vault index:", error);
       new Notice("Failed to refresh vault index. Check console for details.");
     }
-  };
+  }, [app, plugin.vectorStoreManager]);
 
   const clearCurrentAiMessage = () => {
     setCurrentAiMessage("");

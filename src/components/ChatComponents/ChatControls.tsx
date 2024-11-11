@@ -77,7 +77,7 @@ const ChatControls: React.FC<ChatControlsProps> = ({
     };
 
     handleChainSelection();
-  }, [selectedChain]);
+  }, [debug, onRefreshVaultContext, selectedChain, setCurrentChain, vault_qa_strategy]);
 
   useEffect(() => {
     setSelectedChain(settings.defaultChainType);
