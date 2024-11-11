@@ -83,18 +83,6 @@ const ChatControls: React.FC<ChatControlsProps> = ({
     setSelectedChain(settings.defaultChainType);
   }, [settings.defaultChainType]);
 
-  // const handleFindSimilarNotes = async () => {
-  //   const activeFile = app.workspace.getActiveFile();
-  //   if (!activeFile) {
-  //     new Notice("No active file");
-  //     return;
-  //   }
-
-  //   const activeNoteContent = await app.vault.cachedRead(activeFile);
-  //   const similarChunks = await onFindSimilarNotes(activeNoteContent, activeFile.path);
-  //   new SimilarNotesModal(app, similarChunks).open();
-  // };
-
   return (
     <div className="chat-icons-container">
       <TooltipActionButton

@@ -53,7 +53,7 @@ const QASettings: React.FC<QASettingsProps> = ({
         <a href="https://github.com/logancyang/obsidian-copilot/blob/master/local_copilot.md">
           local copilot
         </a>{" "}
-        setup guide to setup Ollama's local embedding model (requires Ollama v0.1.26 or above).
+        setup guide to setup Ollama&apos;s local embedding model (requires Ollama v0.1.26 or above).
       </p>
       <h2>Embedding Models</h2>
       <ModelSettingsComponent
@@ -99,10 +99,10 @@ const QASettings: React.FC<QASettingsProps> = ({
         Vault QA mode.
         <br />
         <br />
-        By "refreshed", it means the vault index is not rebuilt from scratch but rather updated
-        incrementally with new/modified notes since the last index. If you need a complete rebuild,
-        run the commands "Clear vector store" and "Force re-index for QA" manually. This helps
-        reduce costs when using paid embedding models.
+        By &quot;refreshed&quot;, it means the vault index is not rebuilt from scratch but rather
+        updated incrementally with new/modified notes since the last index. If you need a complete
+        rebuild, run the commands &quot;Clear vector store&quot; and &quot;Force re-index for
+        QA&quot; manually. This helps reduce costs when using paid embedding models.
         <br />
         <br />
         Beware of the cost if you are using a paid embedding model and have a large vault! You can

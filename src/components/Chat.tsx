@@ -35,7 +35,7 @@ import {
   tocPrompt,
 } from "@/utils";
 import { MarkdownView, Notice, TFile } from "obsidian";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 
 interface CreateEffectOptions {
   custom_temperature?: number;
@@ -86,9 +86,10 @@ const Chat: React.FC<ChatProps> = ({
     return () => {
       emitter.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
     };
-  }, []);
+  }, [emitter]);
 
-  const app = plugin.app || useContext(AppContext);
+  const contextApp = useContext(AppContext);
+  const app = plugin.app || contextApp;
 
   const handleSendMessage = async () => {
     if (!inputMessage) return;
@@ -152,62 +153,63 @@ const Chat: React.FC<ChatProps> = ({
     return inputMessage;
   };
 
-  const handleSaveAsNote = async (openNote = false) => {
-    if (!app) {
-      console.error("App instance is not available.");
-      return;
-    }
-
-    // Filter visible messages
-    const visibleMessages = chatHistory.filter((message) => message.isVisible);
-
-    if (visibleMessages.length === 0) {
-      new Notice("No messages to save.");
-      return;
-    }
-
-    // Get the epoch of the first message
-    const firstMessageEpoch = visibleMessages[0].timestamp?.epoch || Date.now();
-
-    // Format the chat content
-    const chatContent = visibleMessages
-      .map(
-        (message) =>
-          `**${message.sender}**: ${message.message}\n[Timestamp: ${message.timestamp?.display}]`
-      )
-      .join("\n\n");
-
-    try {
-      // Check if the default folder exists or create it
-      const folder = app.vault.getAbstractFileByPath(defaultSaveFolder);
-      if (!folder) {
-        await app.vault.createFolder(defaultSaveFolder);
+  const handleSaveAsNote = useCallback(
+    async (openNote = false) => {
+      if (!app) {
+        console.error("App instance is not available.");
+        return;
       }
 
-      const { fileName: timestampFileName } = formatDateTime(new Date(firstMessageEpoch));
+      // Filter visible messages
+      const visibleMessages = chatHistory.filter((message) => message.isVisible);
 
-      // Get the first user message
-      const firstUserMessage = visibleMessages.find((message) => message.sender === USER_SENDER);
+      if (visibleMessages.length === 0) {
+        new Notice("No messages to save.");
+        return;
+      }
 
-      // Get the first 10 words from the first user message and sanitize them
-      const firstTenWords = firstUserMessage
-        ? firstUserMessage.message
-            .split(/\s+/)
-            .slice(0, 10)
-            .join(" ")
-            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
-            .trim()
-        : "Untitled Chat";
+      // Get the epoch of the first message
+      const firstMessageEpoch = visibleMessages[0].timestamp?.epoch || Date.now();
 
-      // Create the file name (limit to 100 characters to avoid excessively long names)
-      const sanitizedFileName = `${firstTenWords.slice(0, 100)}@${timestampFileName}`.replace(
-        /\s+/g,
-        "_"
-      );
-      const noteFileName = `${defaultSaveFolder}/${sanitizedFileName}.md`;
+      // Format the chat content
+      const chatContent = visibleMessages
+        .map(
+          (message) =>
+            `**${message.sender}**: ${message.message}\n[Timestamp: ${message.timestamp?.display}]`
+        )
+        .join("\n\n");
 
-      // Add the timestamp and model properties to the note content
-      const noteContentWithTimestamp = `---
+      try {
+        // Check if the default folder exists or create it
+        const folder = app.vault.getAbstractFileByPath(defaultSaveFolder);
+        if (!folder) {
+          await app.vault.createFolder(defaultSaveFolder);
+        }
+
+        const { fileName: timestampFileName } = formatDateTime(new Date(firstMessageEpoch));
+
+        // Get the first user message
+        const firstUserMessage = visibleMessages.find((message) => message.sender === USER_SENDER);
+
+        // Get the first 10 words from the first user message and sanitize them
+        const firstTenWords = firstUserMessage
+          ? firstUserMessage.message
+              .split(/\s+/)
+              .slice(0, 10)
+              .join(" ")
+              .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
+              .trim()
+          : "Untitled Chat";
+
+        // Create the file name (limit to 100 characters to avoid excessively long names)
+        const sanitizedFileName = `${firstTenWords.slice(0, 100)}@${timestampFileName}`.replace(
+          /\s+/g,
+          "_"
+        );
+        const noteFileName = `${defaultSaveFolder}/${sanitizedFileName}.md`;
+
+        // Add the timestamp and model properties to the note content
+        const noteContentWithTimestamp = `---
 epoch: ${firstMessageEpoch}
 modelKey: ${currentModelKey}
 tags:
@@ -216,30 +218,32 @@ tags:
 
 ${chatContent}`;
 
-      // Check if the file already exists
-      const existingFile = app.vault.getAbstractFileByPath(noteFileName);
-      if (existingFile instanceof TFile) {
-        // If the file exists, update its content
-        await app.vault.modify(existingFile, noteContentWithTimestamp);
-        new Notice(`Chat updated in existing note: ${noteFileName}`);
-      } else {
-        // If the file doesn't exist, create a new one
-        await app.vault.create(noteFileName, noteContentWithTimestamp);
-        new Notice(`Chat saved as new note: ${noteFileName}`);
-      }
-
-      if (openNote) {
-        const file = app.vault.getAbstractFileByPath(noteFileName);
-        if (file instanceof TFile) {
-          const leaf = app.workspace.getLeaf();
-          leaf.openFile(file);
+        // Check if the file already exists
+        const existingFile = app.vault.getAbstractFileByPath(noteFileName);
+        if (existingFile instanceof TFile) {
+          // If the file exists, update its content
+          await app.vault.modify(existingFile, noteContentWithTimestamp);
+          new Notice(`Chat updated in existing note: ${noteFileName}`);
+        } else {
+          // If the file doesn't exist, create a new one
+          await app.vault.create(noteFileName, noteContentWithTimestamp);
+          new Notice(`Chat saved as new note: ${noteFileName}`);
         }
+
+        if (openNote) {
+          const file = app.vault.getAbstractFileByPath(noteFileName);
+          if (file instanceof TFile) {
+            const leaf = app.workspace.getLeaf();
+            leaf.openFile(file);
+          }
+        }
+      } catch (error) {
+        console.error("Error saving chat as note:", error);
+        new Notice("Failed to save chat as note. Check console for details.");
       }
-    } catch (error) {
-      console.error("Error saving chat as note:", error);
-      new Notice("Failed to save chat as note. Check console for details.");
-    }
-  };
+    },
+    [app, chatHistory, currentModelKey, defaultSaveFolder, settings.defaultConversationTag]
+  );
 
   const refreshVaultContext = async () => {
     if (!app) {
@@ -362,7 +366,7 @@ ${chatContent}`;
     return () => {
       emitter.removeEventListener("countTokensSelection", handleSelection);
     };
-  }, []);
+  }, [addMessage, chainManager.chatModelManager, emitter]);
 
   // Create an effect for each event type (Copilot command on selected text)
   const createEffect = (
@@ -416,33 +420,48 @@ ${chatContent}`;
     };
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("fixGrammarSpellingSelection", fixGrammarSpellingSelectionPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("summarizeSelection", summarizePrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("tocSelection", tocPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("glossarySelection", glossaryPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("simplifySelection", simplifyPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("emojifySelection", emojifyPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("removeUrlsFromSelection", removeUrlsFromSelectionPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect("rewriteTweetSelection", rewriteTweetSelectionPrompt, { custom_temperature: 0.2 }),
     []
   );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect("rewriteTweetThreadSelection", rewriteTweetThreadSelectionPrompt, {
       custom_temperature: 0.2,
     }),
     []
   );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("rewriteShorterSelection", rewriteShorterSelectionPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("rewriteLongerSelection", rewriteLongerSelectionPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("eli5Selection", eli5SelectionPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(createEffect("rewritePressReleaseSelection", rewritePressReleaseSelectionPrompt), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect("translateSelection", (selectedText, language) =>
       createTranslateSelectionPrompt(language)(selectedText)
     ),
     []
   );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect("changeToneSelection", (selectedText, tone) =>
       createChangeToneSelectionPrompt(tone)(selectedText)
@@ -451,6 +470,7 @@ ${chatContent}`;
   );
 
   const customPromptProcessor = CustomPromptProcessor.getInstance(app.vault, settings);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect(
       "applyCustomPrompt",
@@ -469,6 +489,7 @@ ${chatContent}`;
     []
   );
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(
     createEffect(
       "applyAdhocPrompt",
@@ -515,7 +536,7 @@ ${chatContent}`;
     if (onSaveChat) {
       onSaveChat(handleSaveAsNote);
     }
-  }, [onSaveChat]);
+  }, [handleSaveAsNote, onSaveChat]);
 
   const handleDelete = async (messageIndex: number) => {
     const newChatHistory = [...chatHistory];
@@ -530,6 +551,9 @@ ${chatContent}`;
   return (
     <div className="chat-container">
       <ChatMessages
+        debug={debug}
+        chatModelManager={chainManager.chatModelManager}
+        vectorStoreManager={plugin.vectorStoreManager}
         currentChain={currentChain}
         chatHistory={chatHistory}
         currentAiMessage={currentAiMessage}

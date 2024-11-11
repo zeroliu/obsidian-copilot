@@ -53,8 +53,13 @@ export default class CopilotPlugin extends Plugin {
   encryptionService: EncryptionService;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
+  activeFile: TFile | null = null;
 
   isChatVisible = () => this.chatIsVisible;
+
+  async onunload(): Promise<void> {
+    console.log("unload plugin");
+  }
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -418,12 +423,29 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
+  processActiveFileChange(activeFile: TFile | null) {
+    if (this.activeFile === activeFile) {
+      return;
+    }
+    this.activeFile = activeFile;
+    const activeCopilotView = this.app.workspace
+      .getLeavesOfType(CHAT_VIEWTYPE)
+      .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+    if (activeCopilotView) {
+      const event = new CustomEvent(EVENT_NAMES.ACTIVE_FILE_CHANGE, {
+        detail: { activeFile },
+      });
+      activeCopilotView.emitter.dispatchEvent(event);
+    }
+  }
+
   initActiveLeafChangeHandler() {
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
         if (!leaf) {
           return;
         }
+        this.processActiveFileChange(this.app.workspace.getActiveFile());
         this.processChatIsVisible(leaf.getViewState().type === CHAT_VIEWTYPE);
       })
     );
@@ -672,7 +694,8 @@ export default class CopilotPlugin extends Plugin {
     if (singleDoc.hits.length === 0) {
       // Index is empty, trigger indexing
       new Notice("Index does not exist, indexing vault for similarity search...");
-      await this.vectorStoreManager.indexVaultToVectorStore();
+      return [];
+      // await this.vectorStoreManager.indexVaultToVectorStore();
     }
 
     const hybridRetriever = new HybridRetriever(
@@ -691,9 +714,11 @@ export default class CopilotPlugin extends Plugin {
     const similarDocs = await hybridRetriever.getRelevantDocuments(truncatedContent, {
       runName: "no_hyde",
     });
+    console.log("similarDocs", similarDocs);
     return similarDocs
       .filter((doc) => doc.metadata.path !== activeFilePath)
       .map((doc) => ({
+        title: doc.metadata.title,
         chunk: doc,
         score: doc.metadata.score || 0,
       }))
