@@ -66,15 +66,15 @@ function getAverageEmbedding(noteEmbeddings: number[][]): number[] {
  * @returns A map of the highest score hits for each note.
  */
 function getHighestScoreHits(hits: Result<InternalTypedDocument<any>>[], currentFilePath: string) {
-  const hitMap = new Map<string, number>();
+  const hitMap = new Map<string, Result<InternalTypedDocument<any>>>();
   for (const hit of hits) {
     const matchingScore = hitMap.get(hit.document.path);
     if (matchingScore) {
-      if (hit.score > matchingScore) {
-        hitMap.set(hit.document.path, hit.score);
+      if (hit.score > matchingScore.score) {
+        hitMap.set(hit.document.path, hit);
       }
     } else {
-      hitMap.set(hit.document.path, hit.score);
+      hitMap.set(hit.document.path, hit);
     }
   }
   hitMap.delete(currentFilePath);
@@ -87,7 +87,7 @@ async function calculateSimilarityScore({
 }: {
   db: Orama<any>;
   filePath: string;
-}): Promise<Map<string, number>> {
+}): Promise<Map<string, Result<InternalTypedDocument<any>>>> {
   const debug = getSettings().debug;
 
   const currentNoteEmbeddings = await getNoteEmbeddings(filePath, db);
@@ -128,13 +128,13 @@ function getNoteLinks(file: TFile) {
 }
 
 function mergeScoreMaps(
-  similarityScoreMap: Map<string, number>,
+  similarityScoreMap: Map<string, Result<InternalTypedDocument<any>>>,
   noteLinks: Map<string, { links: boolean; backlinks: boolean }>
 ) {
-  const mergedMap = new Map<string, number>();
+  const mergedMap = new Map<string, { score: number; hit?: Result<InternalTypedDocument<any>> }>();
   const totalWeight = ORIGINAL_WEIGHT + LINKS_WEIGHT;
   for (const [key, value] of similarityScoreMap) {
-    mergedMap.set(key, (value * ORIGINAL_WEIGHT) / totalWeight);
+    mergedMap.set(key, { score: (value.score * ORIGINAL_WEIGHT) / totalWeight, hit: value });
   }
   for (const [key, value] of noteLinks) {
     let score = 0;
@@ -147,7 +147,10 @@ function mergeScoreMaps(
     } else if (value.backlinks) {
       score = LINKS_WEIGHT * 0.8;
     }
-    mergedMap.set(key, (mergedMap.get(key) ?? 0) + score);
+    mergedMap.set(key, {
+      score: (mergedMap.get(key)?.score ?? 0) + score,
+      hit: mergedMap.get(key)?.hit,
+    });
   }
   return mergedMap;
 }
@@ -156,6 +159,7 @@ export type RelevantNoteEntry = {
   document: {
     path: string;
     title: string;
+    content: string;
   };
   metadata: {
     score: number;
@@ -186,9 +190,10 @@ export async function findRelevantNotes({
   const similarityScoreMap = await calculateSimilarityScore({ db, filePath });
   const noteLinks = getNoteLinks(file);
   const mergedScoreMap = mergeScoreMaps(similarityScoreMap, noteLinks);
-  const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => b[1] - a[1]);
+  const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => b[1].score - a[1].score);
+  console.log(sortedHits);
   return sortedHits
-    .map(([path, score]) => {
+    .map(([path, result]) => {
       const file = app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile)) {
         return null;
@@ -197,10 +202,11 @@ export async function findRelevantNotes({
         document: {
           path,
           title: file.basename,
+          content: result.hit?.document.content,
         },
         metadata: {
-          score,
-          similarityScore: similarityScoreMap.get(path),
+          score: result.score,
+          similarityScore: similarityScoreMap.get(path)?.score,
           hasOutgoingLinks: noteLinks.get(path)?.links ?? false,
           hasBacklinks: noteLinks.get(path)?.backlinks ?? false,
         },
